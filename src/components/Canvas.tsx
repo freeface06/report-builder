@@ -14,6 +14,51 @@ function Canvas({ components, setComponents }: Props) {
     const [editText, setEditText] = useState('');
 
     const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [resizing, setResizing] = useState<{
+        id: number;
+        row: number;
+        col: number;
+        startX: number;
+        startY: number;
+        startW: number;
+        startH: number;
+    } | null>(null);
+
+    React.useEffect(() => {
+        const handleMove = (e: MouseEvent) => {
+            if (!resizing) return;
+            const deltaX = e.clientX - resizing.startX;
+            const deltaY = e.clientY - resizing.startY;
+            setComponents((prev) =>
+                prev.map((c) =>
+                    c.id === resizing.id
+                        ? {
+                              ...c,
+                              cellSizes: c.cellSizes?.map((row, ri) =>
+                                  row.map((cell, ci) =>
+                                      ri === resizing.row && ci === resizing.col
+                                          ? {
+                                                width: Math.max(20, resizing.startW + deltaX),
+                                                height: Math.max(20, resizing.startH + deltaY),
+                                            }
+                                          : cell
+                                  )
+                              ),
+                          }
+                        : c
+                )
+            );
+        };
+        const handleUp = () => setResizing(null);
+        if (resizing) {
+            document.addEventListener('mousemove', handleMove);
+            document.addEventListener('mouseup', handleUp);
+        }
+        return () => {
+            document.removeEventListener('mousemove', handleMove);
+            document.removeEventListener('mouseup', handleUp);
+        };
+    }, [resizing, setComponents]);
 
     const divRef = React.useRef<HTMLDivElement>(null);
     const [{ }, dropRef] = useDrop({
@@ -29,8 +74,13 @@ function Canvas({ components, setComponents }: Props) {
                 y: offset.y - 20,
                 text: item.type === 'label' ? '새 라벨' : '',
                 tableData: item.type === 'table' ? [['']] : undefined,
+                cellSizes:
+                    item.type === 'table'
+                        ? [[{ width: 100, height: 24 }]]
+                        : undefined,
                 width: item.type === 'table' ? 200 : undefined,
                 height: item.type === 'table' ? 100 : undefined,
+                style: {},
             };
 
             setComponents((prev) => [...prev, newComp]);
@@ -96,6 +146,13 @@ function Canvas({ components, setComponents }: Props) {
                             ...(comp.tableData || []),
                             Array(comp.tableData?.[0]?.length || 1).fill(''),
                         ],
+                        cellSizes: [
+                            ...(comp.cellSizes || []),
+                            Array(comp.cellSizes?.[0]?.length || 1).fill({
+                                width: 100,
+                                height: 24,
+                            }),
+                        ],
                     }
                     : comp
             )
@@ -109,9 +166,19 @@ function Canvas({ components, setComponents }: Props) {
                     ? {
                         ...comp,
                         tableData: comp.tableData?.map((row) => [...row, '']),
+                        cellSizes: comp.cellSizes?.map((row) => [
+                            ...row,
+                            { width: 100, height: 24 },
+                        ]),
                     }
                     : comp
             )
+        );
+    };
+
+    const updateStyle = (id: number, style: Partial<ReportComponent['style']>) => {
+        setComponents((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, style: { ...c.style, ...style } } : c))
         );
     };
 
@@ -153,7 +220,18 @@ function Canvas({ components, setComponents }: Props) {
                                 handleDoubleClick(comp.id, comp.text || '');
                             }
                         }}
-                        style={{ width: '100%', height: '100%', position: 'relative' }}
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            position: 'relative',
+                            textAlign: comp.style?.textAlign,
+                            fontSize: comp.style?.fontSize,
+                            color: comp.style?.color,
+                            backgroundColor: comp.style?.backgroundColor,
+                            fontWeight: comp.style?.fontWeight,
+                            fontStyle: comp.style?.fontStyle,
+                            textDecoration: comp.style?.textDecoration,
+                        }}
                     >
                         {comp.type === 'label' && (
                             editingId === comp.id ? (
@@ -177,14 +255,33 @@ function Canvas({ components, setComponents }: Props) {
                             )
                         )}
                         {comp.type === 'table' && (
-                            <table style={{ width: '100%', height: '100%', borderCollapse: 'collapse' }}>
+                            <table
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderCollapse: 'collapse',
+                                    textAlign: comp.style?.textAlign,
+                                    fontSize: comp.style?.fontSize,
+                                    color: comp.style?.color,
+                                    backgroundColor: comp.style?.backgroundColor,
+                                    fontWeight: comp.style?.fontWeight,
+                                    fontStyle: comp.style?.fontStyle,
+                                    textDecoration: comp.style?.textDecoration,
+                                }}
+                            >
                                 <tbody>
                                     {comp.tableData?.map((row, ri) => (
                                         <tr key={ri}>
                                             {row.map((cell, ci) => (
                                                 <td
                                                     key={ci}
-                                                    style={{ border: '1px solid #ccc', padding: 4 }}
+                                                    style={{
+                                                        border: '1px solid #ccc',
+                                                        padding: 4,
+                                                        position: 'relative',
+                                                        width: comp.cellSizes?.[ri]?.[ci]?.width,
+                                                        height: comp.cellSizes?.[ri]?.[ci]?.height,
+                                                    }}
                                                     onDoubleClick={() => handleCellDoubleClick(comp.id, ri, ci, cell)}
                                                 >
                                                     {editingCell && editingCell.id === comp.id && editingCell.row === ri && editingCell.col === ci ? (
@@ -201,6 +298,28 @@ function Canvas({ components, setComponents }: Props) {
                                                     ) : (
                                                         cell
                                                     )}
+                                                    <div
+                                                        onMouseDown={(e) =>
+                                                            setResizing({
+                                                                id: comp.id,
+                                                                row: ri,
+                                                                col: ci,
+                                                                startX: e.clientX,
+                                                                startY: e.clientY,
+                                                                startW: comp.cellSizes?.[ri]?.[ci]?.width || 100,
+                                                                startH: comp.cellSizes?.[ri]?.[ci]?.height || 24,
+                                                            })
+                                                        }
+                                                        style={{
+                                                            position: 'absolute',
+                                                            width: 10,
+                                                            height: 10,
+                                                            bottom: 0,
+                                                            right: 0,
+                                                            cursor: 'se-resize',
+                                                            background: 'transparent',
+                                                        }}
+                                                    />
                                                 </td>
                                             ))}
                                         </tr>
@@ -213,12 +332,30 @@ function Canvas({ components, setComponents }: Props) {
                             <>
                                 {comp.type === 'table' && (
                                     <div style={{ position: 'absolute', bottom: -24, left: 0 }}>
-                                        <button onClick={() => addRow(comp.id)} style={{ marginRight: 4 }}>행 추가</button>
-                                        <button onClick={() => addColumn(comp.id)}>열 추가</button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                addRow(comp.id);
+                                            }}
+                                            style={{ marginRight: 4 }}
+                                        >
+                                            행 추가
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                addColumn(comp.id);
+                                            }}
+                                        >
+                                            열 추가
+                                        </button>
                                     </div>
                                 )}
                                 <button
-                                    onClick={() => handleDelete(comp.id)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(comp.id);
+                                    }}
                                     style={{
                                         position: 'absolute',
                                         top: -10,
@@ -240,6 +377,73 @@ function Canvas({ components, setComponents }: Props) {
                 </Rnd>
             ))}
 
+            {selectedId && (
+                <div className="fixed right-4 top-4 bg-white p-4 shadow rounded space-y-2">
+                    <div>
+                        <label className="mr-2">Font Size</label>
+                        <input
+                            type="number"
+                            className="border px-1"
+                            value={components.find((c) => c.id === selectedId)?.style?.fontSize || ''}
+                            onChange={(e) => updateStyle(selectedId, { fontSize: Number(e.target.value) })}
+                        />
+                    </div>
+                    <div>
+                        <label className="mr-2">Font Color</label>
+                        <input
+                            type="color"
+                            value={components.find((c) => c.id === selectedId)?.style?.color || '#000000'}
+                            onChange={(e) => updateStyle(selectedId, { color: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="mr-2">Background</label>
+                        <input
+                            type="color"
+                            value={components.find((c) => c.id === selectedId)?.style?.backgroundColor || '#ffffff'}
+                            onChange={(e) => updateStyle(selectedId, { backgroundColor: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="mr-2">Align</label>
+                        <select
+                            className="border"
+                            value={components.find((c) => c.id === selectedId)?.style?.textAlign || 'left'}
+                            onChange={(e) => updateStyle(selectedId, { textAlign: e.target.value as any })}
+                        >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                        </select>
+                    </div>
+                    <div className="space-x-2">
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={components.find((c) => c.id === selectedId)?.style?.fontWeight === 'bold'}
+                                onChange={(e) => updateStyle(selectedId, { fontWeight: e.target.checked ? 'bold' : 'normal' })}
+                            />
+                            Bold
+                        </label>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={components.find((c) => c.id === selectedId)?.style?.fontStyle === 'italic'}
+                                onChange={(e) => updateStyle(selectedId, { fontStyle: e.target.checked ? 'italic' : 'normal' })}
+                            />
+                            Italic
+                        </label>
+                        <label>
+                            <input
+                                type="checkbox"
+                                checked={components.find((c) => c.id === selectedId)?.style?.textDecoration === 'underline'}
+                                onChange={(e) => updateStyle(selectedId, { textDecoration: e.target.checked ? 'underline' : 'none' })}
+                            />
+                            Underline
+                        </label>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

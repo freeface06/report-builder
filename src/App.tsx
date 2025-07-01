@@ -20,6 +20,22 @@ export interface ReportComponent {
    * Only used when type === 'table'.
    */
   tableData?: string[][];
+  /**
+   * Per cell sizes when type === 'table'.
+   */
+  cellSizes?: { width: number; height: number }[][];
+  /**
+   * Style for label or table text.
+   */
+  style?: {
+    fontSize?: number;
+    color?: string;
+    backgroundColor?: string;
+    textAlign?: 'left' | 'center' | 'right';
+    fontWeight?: 'normal' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    textDecoration?: 'none' | 'underline';
+  };
 }
 
 function App() {
