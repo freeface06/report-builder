@@ -91,9 +91,11 @@ interface ReportComponent {
   text?: string;
   tableData?: string[][];
   style?: {
-    fontSize?: string;
+    fontSize?: number;
     textAlign?: 'left' | 'center' | 'right';
     fontWeight?: 'normal' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    textDecoration?: 'none' | 'underline';
     color?: string;
     backgroundColor?: string;
   };
