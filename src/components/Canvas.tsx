@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDrop } from 'react-dnd';
 import { ReportComponent } from '../App';
 import { Rnd } from 'react-rnd';
+import TopToolbar from './TopToolbar';
 
 interface Props {
     components: ReportComponent[];
@@ -182,8 +183,16 @@ function Canvas({ components, setComponents }: Props) {
         );
     };
 
+    const selectedComponent = components.find((c) => c.id === selectedId);
+
     return (
         <div ref={divRef} style={{ flex: 1, background: 'white', position: 'relative' }}>
+            <TopToolbar
+                component={selectedComponent}
+                updateStyle={(style) => {
+                    if (selectedId) updateStyle(selectedId, style);
+                }}
+            />
             {components.map((comp) => (
                 <Rnd
                     key={comp.id}
@@ -367,6 +376,7 @@ function Canvas({ components, setComponents }: Props) {
                                         width: 20,
                                         height: 20,
                                         cursor: 'pointer',
+                                        zIndex: 20,
                                     }}
                                 >
                                     ×
@@ -377,73 +387,6 @@ function Canvas({ components, setComponents }: Props) {
                 </Rnd>
             ))}
 
-            {selectedId && (
-                <div className="fixed right-4 top-4 bg-white p-4 shadow rounded space-y-2">
-                    <div>
-                        <label className="mr-2">Font Size</label>
-                        <input
-                            type="number"
-                            className="border px-1"
-                            value={components.find((c) => c.id === selectedId)?.style?.fontSize || ''}
-                            onChange={(e) => updateStyle(selectedId, { fontSize: Number(e.target.value) })}
-                        />
-                    </div>
-                    <div>
-                        <label className="mr-2">Font Color</label>
-                        <input
-                            type="color"
-                            value={components.find((c) => c.id === selectedId)?.style?.color || '#000000'}
-                            onChange={(e) => updateStyle(selectedId, { color: e.target.value })}
-                        />
-                    </div>
-                    <div>
-                        <label className="mr-2">Background</label>
-                        <input
-                            type="color"
-                            value={components.find((c) => c.id === selectedId)?.style?.backgroundColor || '#ffffff'}
-                            onChange={(e) => updateStyle(selectedId, { backgroundColor: e.target.value })}
-                        />
-                    </div>
-                    <div>
-                        <label className="mr-2">Align</label>
-                        <select
-                            className="border"
-                            value={components.find((c) => c.id === selectedId)?.style?.textAlign || 'left'}
-                            onChange={(e) => updateStyle(selectedId, { textAlign: e.target.value as any })}
-                        >
-                            <option value="left">Left</option>
-                            <option value="center">Center</option>
-                            <option value="right">Right</option>
-                        </select>
-                    </div>
-                    <div className="space-x-2">
-                        <label>
-                            <input
-                                type="checkbox"
-                                checked={components.find((c) => c.id === selectedId)?.style?.fontWeight === 'bold'}
-                                onChange={(e) => updateStyle(selectedId, { fontWeight: e.target.checked ? 'bold' : 'normal' })}
-                            />
-                            Bold
-                        </label>
-                        <label>
-                            <input
-                                type="checkbox"
-                                checked={components.find((c) => c.id === selectedId)?.style?.fontStyle === 'italic'}
-                                onChange={(e) => updateStyle(selectedId, { fontStyle: e.target.checked ? 'italic' : 'normal' })}
-                            />
-                            Italic
-                        </label>
-                        <label>
-                            <input
-                                type="checkbox"
-                                checked={components.find((c) => c.id === selectedId)?.style?.textDecoration === 'underline'}
-                                onChange={(e) => updateStyle(selectedId, { textDecoration: e.target.checked ? 'underline' : 'none' })}
-                            />
-                            Underline
-                        </label>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
