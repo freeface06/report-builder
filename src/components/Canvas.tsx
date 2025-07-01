@@ -10,6 +10,7 @@ interface Props {
 
 function Canvas({ components, setComponents }: Props) {
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingCell, setEditingCell] = useState<{ id: number; row: number; col: number } | null>(null);
     const [editText, setEditText] = useState('');
 
     const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -27,6 +28,9 @@ function Canvas({ components, setComponents }: Props) {
                 x: offset.x - 220,
                 y: offset.y - 20,
                 text: item.type === 'label' ? '새 라벨' : '',
+                tableData: item.type === 'table' ? [['']] : undefined,
+                width: item.type === 'table' ? 200 : undefined,
+                height: item.type === 'table' ? 100 : undefined,
             };
 
             setComponents((prev) => [...prev, newComp]);
@@ -54,10 +58,61 @@ function Canvas({ components, setComponents }: Props) {
         setEditingId(null);
     };
 
+    const handleCellDoubleClick = (id: number, row: number, col: number, text: string) => {
+        setEditingCell({ id, row, col });
+        setEditText(text);
+    };
+    const handleCellBlur = (id: number, row: number, col: number) => {
+        setComponents((prev) =>
+            prev.map((comp) =>
+                comp.id === id
+                    ? {
+                        ...comp,
+                        tableData: comp.tableData?.map((r, ri) =>
+                            ri === row
+                                ? r.map((c, ci) => (ci === col ? editText : c))
+                                : r
+                        ),
+                    }
+                    : comp
+            )
+        );
+        setEditingCell(null);
+    };
+
     const handleDelete = (id: number) => {
         setComponents((prev) => prev.filter((comp) => comp.id !== id));
         if (editingId === id) setEditingId(null);
         if (selectedId === id) setSelectedId(null);
+    };
+
+    const addRow = (id: number) => {
+        setComponents((prev) =>
+            prev.map((comp) =>
+                comp.id === id
+                    ? {
+                        ...comp,
+                        tableData: [
+                            ...(comp.tableData || []),
+                            Array(comp.tableData?.[0]?.length || 1).fill(''),
+                        ],
+                    }
+                    : comp
+            )
+        );
+    };
+
+    const addColumn = (id: number) => {
+        setComponents((prev) =>
+            prev.map((comp) =>
+                comp.id === id
+                    ? {
+                        ...comp,
+                        tableData: comp.tableData?.map((row) => [...row, '']),
+                    }
+                    : comp
+            )
+        );
     };
 
     return (
@@ -100,44 +155,86 @@ function Canvas({ components, setComponents }: Props) {
                         }}
                         style={{ width: '100%', height: '100%', position: 'relative' }}
                     >
-                        {editingId === comp.id ? (
-                            <input
-                                value={editText}
-                                onChange={(e) => setEditText(e.target.value)}
-                                onBlur={() => handleBlur(comp.id)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleBlur(comp.id);
-                                }}
-                                autoFocus
-                                style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    fontSize: 'inherit',
-                                    border: '1px solid gray',
-                                }}
-                            />
-                        ) : (
-                            <span>{comp.type === 'label' ? comp.text : comp.type.toUpperCase()}</span>
+                        {comp.type === 'label' && (
+                            editingId === comp.id ? (
+                                <input
+                                    value={editText}
+                                    onChange={(e) => setEditText(e.target.value)}
+                                    onBlur={() => handleBlur(comp.id)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleBlur(comp.id);
+                                    }}
+                                    autoFocus
+                                    style={{
+                                        width: '100%',
+                                        height: '100%',
+                                        fontSize: 'inherit',
+                                        border: '1px solid gray',
+                                    }}
+                                />
+                            ) : (
+                                <span>{comp.text}</span>
+                            )
+                        )}
+                        {comp.type === 'table' && (
+                            <table style={{ width: '100%', height: '100%', borderCollapse: 'collapse' }}>
+                                <tbody>
+                                    {comp.tableData?.map((row, ri) => (
+                                        <tr key={ri}>
+                                            {row.map((cell, ci) => (
+                                                <td
+                                                    key={ci}
+                                                    style={{ border: '1px solid #ccc', padding: 4 }}
+                                                    onDoubleClick={() => handleCellDoubleClick(comp.id, ri, ci, cell)}
+                                                >
+                                                    {editingCell && editingCell.id === comp.id && editingCell.row === ri && editingCell.col === ci ? (
+                                                        <input
+                                                            value={editText}
+                                                            onChange={(e) => setEditText(e.target.value)}
+                                                            onBlur={() => handleCellBlur(comp.id, ri, ci)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') handleCellBlur(comp.id, ri, ci);
+                                                            }}
+                                                            autoFocus
+                                                            style={{ width: '100%', height: '100%', boxSizing: 'border-box' }}
+                                                        />
+                                                    ) : (
+                                                        cell
+                                                    )}
+                                                </td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         )}
 
                         {selectedId === comp.id && (
-                            <button
-                                onClick={() => handleDelete(comp.id)}
-                                style={{
-                                    position: 'absolute',
-                                    top: -10,
-                                    right: -10,
-                                    background: 'red',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '50%',
-                                    width: 20,
-                                    height: 20,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                ×
-                            </button>
+                            <>
+                                {comp.type === 'table' && (
+                                    <div style={{ position: 'absolute', bottom: -24, left: 0 }}>
+                                        <button onClick={() => addRow(comp.id)} style={{ marginRight: 4 }}>행 추가</button>
+                                        <button onClick={() => addColumn(comp.id)}>열 추가</button>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => handleDelete(comp.id)}
+                                    style={{
+                                        position: 'absolute',
+                                        top: -10,
+                                        right: -10,
+                                        background: 'red',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '50%',
+                                        width: 20,
+                                        height: 20,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    ×
+                                </button>
+                            </>
                         )}
                     </div>
                 </Rnd>
