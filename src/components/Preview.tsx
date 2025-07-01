@@ -51,12 +51,16 @@ function Preview({ components, onClose }: Props) {
                   {comp.tableData?.map((row, i) => (
                     <tr key={i}>
                       {row.map((cell, j) => (
+                        comp.cellSpans?.[i]?.[j]?.colspan === 0 || comp.cellSpans?.[i]?.[j]?.rowspan === 0 ? null : (
                         <td
                           key={j}
+                          rowSpan={comp.cellSpans?.[i]?.[j]?.rowspan || 1}
+                          colSpan={comp.cellSpans?.[i]?.[j]?.colspan || 1}
                           style={{ border: '1px solid #000', padding: 4 }}
                         >
                           {cell}
                         </td>
+                        )
                       ))}
                     </tr>
                   ))}

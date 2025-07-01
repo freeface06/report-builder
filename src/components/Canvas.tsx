@@ -7,9 +7,13 @@ import TopToolbar from './TopToolbar';
 interface Props {
     components: ReportComponent[];
     setComponents: React.Dispatch<React.SetStateAction<ReportComponent[]>>;
+    undo: () => void;
+    redo: () => void;
+    canUndo: boolean;
+    canRedo: boolean;
 }
 
-function Canvas({ components, setComponents }: Props) {
+function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Props) {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editingCell, setEditingCell] = useState<{ id: number; row: number; col: number } | null>(null);
     const [editText, setEditText] = useState('');
@@ -23,6 +27,13 @@ function Canvas({ components, setComponents }: Props) {
         startY: number;
         startW: number;
         startH: number;
+    } | null>(null);
+    const [contextCell, setContextCell] = useState<{
+        id: number;
+        row: number;
+        col: number;
+        x: number;
+        y: number;
     } | null>(null);
 
     React.useEffect(() => {
@@ -61,6 +72,14 @@ function Canvas({ components, setComponents }: Props) {
         };
     }, [resizing, setComponents]);
 
+    React.useEffect(() => {
+        const hide = () => setContextCell(null);
+        document.addEventListener('click', hide);
+        return () => {
+            document.removeEventListener('click', hide);
+        };
+    }, []);
+
     const divRef = React.useRef<HTMLDivElement>(null);
     const [{ }, dropRef] = useDrop({
         accept: 'COMPONENT',
@@ -74,10 +93,38 @@ function Canvas({ components, setComponents }: Props) {
                 x: offset.x - 220,
                 y: offset.y - 20,
                 text: item.type === 'label' ? '새 라벨' : '',
-                tableData: item.type === 'table' ? [['']] : undefined,
+                tableData:
+                    item.type === 'table'
+                        ? [
+                              ['', ''],
+                              ['', ''],
+                          ]
+                        : undefined,
                 cellSizes:
                     item.type === 'table'
-                        ? [[{ width: 100, height: 24 }]]
+                        ? [
+                              [
+                                  { width: 100, height: 24 },
+                                  { width: 100, height: 24 },
+                              ],
+                              [
+                                  { width: 100, height: 24 },
+                                  { width: 100, height: 24 },
+                              ],
+                          ]
+                        : undefined,
+                cellSpans:
+                    item.type === 'table'
+                        ? [
+                              [
+                                  { rowspan: 1, colspan: 1 },
+                                  { rowspan: 1, colspan: 1 },
+                              ],
+                              [
+                                  { rowspan: 1, colspan: 1 },
+                                  { rowspan: 1, colspan: 1 },
+                              ],
+                          ]
                         : undefined,
                 width: item.type === 'table' ? 200 : undefined,
                 height: item.type === 'table' ? 100 : undefined,
@@ -154,6 +201,10 @@ function Canvas({ components, setComponents }: Props) {
                                 height: 24,
                             }),
                         ],
+                        cellSpans: [
+                            ...(comp.cellSpans || []),
+                            Array(comp.cellSpans?.[0]?.length || 1).fill({ rowspan: 1, colspan: 1 }),
+                        ],
                     }
                     : comp
             )
@@ -171,9 +222,51 @@ function Canvas({ components, setComponents }: Props) {
                             ...row,
                             { width: 100, height: 24 },
                         ]),
+                        cellSpans: comp.cellSpans?.map((row) => [
+                            ...row,
+                            { rowspan: 1, colspan: 1 },
+                        ]),
                     }
                     : comp
             )
+        );
+    };
+
+    const mergeRight = (id: number, row: number, col: number) => {
+        setComponents((prev) =>
+            prev.map((comp) => {
+                if (comp.id !== id) return comp;
+                if (!comp.cellSpans) return comp;
+                if (col >= (comp.tableData?.[row].length || 0) - 1) return comp;
+                if (comp.cellSpans[row][col + 1].colspan === 0) return comp;
+                const spans = comp.cellSpans.map((r) => r.map((c) => ({ ...c })));
+                const sizes = comp.cellSizes?.map((r) => r.map((c) => ({ ...c }))) || [];
+                spans[row][col].colspan += spans[row][col + 1].colspan;
+                spans[row][col + 1] = { rowspan: 0, colspan: 0 };
+                if (sizes[row]) {
+                    sizes[row][col].width += sizes[row][col + 1].width;
+                }
+                return { ...comp, cellSpans: spans, cellSizes: sizes };
+            })
+        );
+    };
+
+    const mergeDown = (id: number, row: number, col: number) => {
+        setComponents((prev) =>
+            prev.map((comp) => {
+                if (comp.id !== id) return comp;
+                if (!comp.cellSpans) return comp;
+                if (row >= (comp.tableData?.length || 0) - 1) return comp;
+                if (comp.cellSpans[row + 1][col].rowspan === 0) return comp;
+                const spans = comp.cellSpans.map((r) => r.map((c) => ({ ...c })));
+                const sizes = comp.cellSizes?.map((r) => r.map((c) => ({ ...c }))) || [];
+                spans[row][col].rowspan += spans[row + 1][col].rowspan;
+                spans[row + 1][col] = { rowspan: 0, colspan: 0 };
+                if (sizes[row]) {
+                    sizes[row][col].height += sizes[row + 1][col].height;
+                }
+                return { ...comp, cellSpans: spans, cellSizes: sizes };
+            })
         );
     };
 
@@ -186,12 +279,16 @@ function Canvas({ components, setComponents }: Props) {
     const selectedComponent = components.find((c) => c.id === selectedId);
 
     return (
-        <div ref={divRef} style={{ flex: 1, background: 'white', position: 'relative' }}>
+        <div ref={divRef} style={{ flex: 1, background: 'white', position: 'relative', paddingTop: 50 }}>
             <TopToolbar
                 component={selectedComponent}
                 updateStyle={(style) => {
                     if (selectedId) updateStyle(selectedId, style);
                 }}
+                undo={undo}
+                redo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
             />
             {components.map((comp) => (
                 <Rnd
@@ -282,8 +379,11 @@ function Canvas({ components, setComponents }: Props) {
                                     {comp.tableData?.map((row, ri) => (
                                         <tr key={ri}>
                                             {row.map((cell, ci) => (
+                                                comp.cellSpans?.[ri]?.[ci]?.colspan === 0 || comp.cellSpans?.[ri]?.[ci]?.rowspan === 0 ? null : (
                                                 <td
                                                     key={ci}
+                                                    rowSpan={comp.cellSpans?.[ri]?.[ci]?.rowspan || 1}
+                                                    colSpan={comp.cellSpans?.[ri]?.[ci]?.colspan || 1}
                                                     style={{
                                                         border: '1px solid #ccc',
                                                         padding: 4,
@@ -292,6 +392,10 @@ function Canvas({ components, setComponents }: Props) {
                                                         height: comp.cellSizes?.[ri]?.[ci]?.height,
                                                     }}
                                                     onDoubleClick={() => handleCellDoubleClick(comp.id, ri, ci, cell)}
+                                                    onContextMenu={(e) => {
+                                                        e.preventDefault();
+                                                        setContextCell({ id: comp.id, row: ri, col: ci, x: e.clientX, y: e.clientY });
+                                                    }}
                                                 >
                                                     {editingCell && editingCell.id === comp.id && editingCell.row === ri && editingCell.col === ci ? (
                                                         <input
@@ -330,6 +434,7 @@ function Canvas({ components, setComponents }: Props) {
                                                         }}
                                                     />
                                                 </td>
+                                                )
                                             ))}
                                         </tr>
                                     ))}
@@ -386,6 +491,37 @@ function Canvas({ components, setComponents }: Props) {
                     </div>
                 </Rnd>
             ))}
+            {contextCell && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: contextCell.y,
+                        left: contextCell.x,
+                        background: 'white',
+                        border: '1px solid #ccc',
+                        zIndex: 1000,
+                    }}
+                >
+                    <button
+                        onClick={() => {
+                            mergeRight(contextCell.id, contextCell.row, contextCell.col);
+                            setContextCell(null);
+                        }}
+                        style={{ display: 'block', width: '100%', padding: 4 }}
+                    >
+                        오른쪽 셀과 병합
+                    </button>
+                    <button
+                        onClick={() => {
+                            mergeDown(contextCell.id, contextCell.row, contextCell.col);
+                            setContextCell(null);
+                        }}
+                        style={{ display: 'block', width: '100%', padding: 4 }}
+                    >
+                        아래 셀과 병합
+                    </button>
+                </div>
+            )}
 
         </div>
     );
