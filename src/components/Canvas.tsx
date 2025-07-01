@@ -376,7 +376,7 @@ function Canvas({ components, setComponents }: Props) {
                                         width: 20,
                                         height: 20,
                                         cursor: 'pointer',
-                                        zIndex: 20,
+                                        zIndex: 50,
                                     }}
                                 >
                                     ×
