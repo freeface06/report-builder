@@ -1,25 +1,31 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from 'react';
+import { DndProvider } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
+
+// Make sure the Sidebar component exists at this path, or update the path if necessary
+import Sidebar from './components/Sidebar';
+import Canvas from './components/Canvas';
+
+export interface ReportComponent {
+  id: number;
+  type: 'label' | 'table' | 'image';
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  text?: string;
+}
 
 function App() {
+  const [components, setComponents] = useState<ReportComponent[]>([]);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <DndProvider backend={HTML5Backend}>
+      <div style={{ display: 'flex', height: '100vh' }}>
+        <Sidebar />
+        <Canvas components={components} setComponents={setComponents} />
+      </div>
+    </DndProvider>
   );
 }
 
