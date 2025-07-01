@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 
@@ -6,6 +6,7 @@ import { HTML5Backend } from 'react-dnd-html5-backend';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
 import Preview from './components/Preview';
+import useUndo from './useUndo';
 
 export interface ReportComponent {
   id: number;
@@ -25,6 +26,10 @@ export interface ReportComponent {
    */
   cellSizes?: { width: number; height: number }[][];
   /**
+   * Cell spans for merged cells when type === 'table'.
+   */
+  cellSpans?: { rowspan: number; colspan: number }[][];
+  /**
    * Style for label or table text.
    */
   style?: {
@@ -39,8 +44,15 @@ export interface ReportComponent {
 }
 
 function App() {
-  const [components, setComponents] = useState<ReportComponent[]>([]);
-  const [preview, setPreview] = useState(false);
+  const {
+    state: components,
+    set: setComponents,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+  } = useUndo<ReportComponent[]>([]);
+  const [preview, setPreview] = React.useState(false);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -49,7 +61,14 @@ function App() {
       ) : (
         <div style={{ display: 'flex', height: '100vh', position: 'relative' }}>
           <Sidebar />
-          <Canvas components={components} setComponents={setComponents} />
+          <Canvas
+            components={components}
+            setComponents={setComponents}
+            undo={undo}
+            redo={redo}
+            canUndo={canUndo}
+            canRedo={canRedo}
+          />
           <button
             onClick={() => setPreview(true)}
             style={{ position: 'absolute', top: 10, right: 10 }}
