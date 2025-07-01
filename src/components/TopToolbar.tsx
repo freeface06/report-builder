@@ -19,14 +19,14 @@ function TopToolbar({ component, updateStyle, undo, redo, canUndo, canRedo }: Pr
         disabled={!canUndo}
         className="border rounded px-2 py-1 text-sm disabled:opacity-50"
       >
-        Undo
+        되돌리기
       </button>
       <button
         onClick={redo}
         disabled={!canRedo}
         className="border rounded px-2 py-1 text-sm disabled:opacity-50"
       >
-        Redo
+        다시하기
       </button>
       {component && (
         <>

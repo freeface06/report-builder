@@ -5,10 +5,11 @@ import { ReportComponent } from '../App';
 
 interface Props {
   components: ReportComponent[];
+  pageCount: number;
   onClose: () => void;
 }
 
-function Preview({ components, onClose }: Props) {
+function Preview({ components, pageCount, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   const exportPDF = async () => {
@@ -28,8 +29,21 @@ function Preview({ components, onClose }: Props) {
         <button onClick={onClose}>닫기</button>
         <button onClick={exportPDF}>PDF 저장</button>
       </div>
-      <div ref={ref} style={{ position: 'relative', background: 'white', minHeight: '90vh' }}>
-        {components.map((comp) => {
+      <div ref={ref} style={{ position: 'relative', background: 'white' }}>
+        {Array.from({ length: pageCount }).map((_, pageIndex) => (
+          <div
+            key={pageIndex}
+            style={{
+              width: 794,
+              height: 1123,
+              margin: '0 auto 20px',
+              position: 'relative',
+              border: '1px solid #ccc',
+            }}
+          >
+            {components
+              .filter((c) => c.page === pageIndex)
+              .map((comp) => {
           const style: React.CSSProperties = {
             position: 'absolute',
             left: comp.x,
@@ -52,14 +66,14 @@ function Preview({ components, onClose }: Props) {
                     <tr key={i}>
                       {row.map((cell, j) => (
                         comp.cellSpans?.[i]?.[j]?.colspan === 0 || comp.cellSpans?.[i]?.[j]?.rowspan === 0 ? null : (
-                        <td
-                          key={j}
-                          rowSpan={comp.cellSpans?.[i]?.[j]?.rowspan || 1}
-                          colSpan={comp.cellSpans?.[i]?.[j]?.colspan || 1}
-                          style={{ border: '1px solid #000', padding: 4 }}
-                        >
-                          {cell}
-                        </td>
+                          <td
+                            key={j}
+                            rowSpan={comp.cellSpans?.[i]?.[j]?.rowspan || 1}
+                            colSpan={comp.cellSpans?.[i]?.[j]?.colspan || 1}
+                            style={{ border: '1px solid #000', padding: 4 }}
+                          >
+                            {cell}
+                          </td>
                         )
                       ))}
                     </tr>
@@ -69,7 +83,9 @@ function Preview({ components, onClose }: Props) {
             );
           }
           return null;
-        })}
+              })}
+          </div>
+        ))}
       </div>
     </div>
   );
