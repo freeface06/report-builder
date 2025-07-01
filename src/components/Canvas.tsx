@@ -7,13 +7,15 @@ import TopToolbar from './TopToolbar';
 interface Props {
     components: ReportComponent[];
     setComponents: React.Dispatch<React.SetStateAction<ReportComponent[]>>;
+    pageCount: number;
+    setPageCount: React.Dispatch<React.SetStateAction<number>>;
     undo: () => void;
     redo: () => void;
     canUndo: boolean;
     canRedo: boolean;
 }
 
-function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Props) {
+function Canvas({ components, setComponents, pageCount, setPageCount, undo, redo, canUndo, canRedo }: Props) {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editingCell, setEditingCell] = useState<{ id: number; row: number; col: number } | null>(null);
     const [editText, setEditText] = useState('');
@@ -35,6 +37,7 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
         x: number;
         y: number;
     } | null>(null);
+    const [selectedCells, setSelectedCells] = useState<{ id: number; cells: { row: number; col: number }[] } | null>(null);
 
     React.useEffect(() => {
         const handleMove = (e: MouseEvent) => {
@@ -73,7 +76,10 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
     }, [resizing, setComponents]);
 
     React.useEffect(() => {
-        const hide = () => setContextCell(null);
+        const hide = () => {
+            setContextCell(null);
+            setSelectedCells(null);
+        };
         document.addEventListener('click', hide);
         return () => {
             document.removeEventListener('click', hide);
@@ -87,11 +93,22 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
             const offset = monitor.getClientOffset();
             if (!offset) return;
 
+            const toolbarHeight = 50;
+            const pageHeight = 1123;
+            const pageGap = 20;
+            const yOffset = offset.y - toolbarHeight;
+            const page = Math.min(
+                pageCount - 1,
+                Math.max(0, Math.floor(yOffset / (pageHeight + pageGap)))
+            );
+            const yInPage = yOffset - page * (pageHeight + pageGap);
+
             const newComp: ReportComponent = {
                 id: Date.now(),
                 type: item.type,
+                page,
                 x: offset.x - 220,
-                y: offset.y - 20,
+                y: yInPage,
                 text: item.type === 'label' ? '새 라벨' : '',
                 tableData:
                     item.type === 'table'
@@ -159,6 +176,21 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
     const handleCellDoubleClick = (id: number, row: number, col: number, text: string) => {
         setEditingCell({ id, row, col });
         setEditText(text);
+    };
+    const handleCellClick = (id: number, row: number, col: number, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (e.shiftKey) {
+            setSelectedCells((prev) => {
+                if (!prev || prev.id !== id) return { id, cells: [{ row, col }] };
+                const exists = prev.cells.some((c) => c.row === row && c.col === col);
+                if (exists) {
+                    return { id, cells: prev.cells.filter((c) => !(c.row === row && c.col === col)) };
+                }
+                return { id, cells: [...prev.cells, { row, col }] };
+            });
+        } else {
+            setSelectedCells({ id, cells: [{ row, col }] });
+        }
     };
     const handleCellBlur = (id: number, row: number, col: number) => {
         setComponents((prev) =>
@@ -270,6 +302,62 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
         );
     };
 
+    const mergeSelected = () => {
+        if (!selectedCells) return;
+        const { id, cells } = selectedCells;
+        if (cells.length <= 1) return;
+        const rows = cells.map((c) => c.row);
+        const cols = cells.map((c) => c.col);
+        const minR = Math.min(...rows);
+        const maxR = Math.max(...rows);
+        const minC = Math.min(...cols);
+        const maxC = Math.max(...cols);
+        setComponents((prev) =>
+            prev.map((comp) => {
+                if (comp.id !== id || !comp.cellSpans || !comp.cellSizes) return comp;
+                const spans = comp.cellSpans.map((r) => r.map((c) => ({ ...c })));
+                const sizes = comp.cellSizes.map((r) => r.map((c) => ({ ...c })));
+                const width = sizes[minR].slice(minC, maxC + 1).reduce((a, b) => a + b.width, 0);
+                const height = sizes.slice(minR, maxR + 1).reduce((a, r) => a + r[minC].height, 0);
+                for (let r = minR; r <= maxR; r++) {
+                    for (let c = minC; c <= maxC; c++) {
+                        spans[r][c] = { rowspan: 0, colspan: 0 };
+                    }
+                }
+                spans[minR][minC] = { rowspan: maxR - minR + 1, colspan: maxC - minC + 1 };
+                sizes[minR][minC] = { width, height };
+                return { ...comp, cellSpans: spans, cellSizes: sizes };
+            })
+        );
+        setSelectedCells({ id, cells: [{ row: minR, col: minC }] });
+    };
+
+    const unmergeSelected = () => {
+        if (!selectedCells) return;
+        const { id, cells } = selectedCells;
+        const rows = cells.map((c) => c.row);
+        const cols = cells.map((c) => c.col);
+        const minR = Math.min(...rows);
+        const maxR = Math.max(...rows);
+        const minC = Math.min(...cols);
+        const maxC = Math.max(...cols);
+        setComponents((prev) =>
+            prev.map((comp) => {
+                if (comp.id !== id || !comp.cellSpans || !comp.cellSizes) return comp;
+                const spans = comp.cellSpans.map((r) => r.map((c) => ({ ...c })));
+                const sizes = comp.cellSizes.map((r) => r.map((c) => ({ ...c })));
+                for (let r = minR; r <= maxR; r++) {
+                    for (let c = minC; c <= maxC; c++) {
+                        spans[r][c] = { rowspan: 1, colspan: 1 };
+                        sizes[r][c] = { width: 100, height: 24 };
+                    }
+                }
+                return { ...comp, cellSpans: spans, cellSizes: sizes };
+            })
+        );
+        setSelectedCells(null);
+    };
+
     const updateStyle = (id: number, style: Partial<ReportComponent['style']>) => {
         setComponents((prev) =>
             prev.map((c) => (c.id === id ? { ...c, style: { ...c.style, ...style } } : c))
@@ -279,7 +367,7 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
     const selectedComponent = components.find((c) => c.id === selectedId);
 
     return (
-        <div ref={divRef} style={{ flex: 1, background: 'white', position: 'relative', paddingTop: 50 }}>
+        <div ref={divRef} style={{ flex: 1, background: '#e5e5e5', position: 'relative', paddingTop: 50, overflow: 'auto' }}>
             <TopToolbar
                 component={selectedComponent}
                 updateStyle={(style) => {
@@ -290,36 +378,50 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
                 canUndo={canUndo}
                 canRedo={canRedo}
             />
-            {components.map((comp) => (
-                <Rnd
-                    key={comp.id}
-                    size={{ width: comp.width || 120, height: comp.height || 40 }}
-                    position={{ x: comp.x, y: comp.y }}
-                    onClick={() => setSelectedId(comp.id)}
-                    onDragStop={(e, d) => {
-                        setComponents((prev) =>
-                            prev.map((c) =>
-                                c.id === comp.id ? { ...c, x: d.x, y: d.y } : c
-                            )
-                        );
+            {Array.from({ length: pageCount }).map((_, pageIndex) => (
+                <div
+                    key={pageIndex}
+                    style={{
+                        width: 794,
+                        height: 1123,
+                        margin: '0 auto 20px',
+                        background: 'white',
+                        border: '1px solid #ccc',
+                        position: 'relative',
                     }}
-                    onResizeStop={(e, direction, ref, delta, position) => {
-                        setComponents((prev) =>
-                            prev.map((c) =>
-                                c.id === comp.id
-                                    ? {
-                                        ...c,
-                                        width: parseInt(ref.style.width),
-                                        height: parseInt(ref.style.height),
-                                        x: position.x,
-                                        y: position.y,
-                                    }
-                                    : c
-                            )
-                        );
-                    }}
-                    bounds="parent"
                 >
+                    {components
+                        .filter((c) => c.page === pageIndex)
+                        .map((comp) => (
+                            <Rnd
+                                key={comp.id}
+                                size={{ width: comp.width || 120, height: comp.height || 40 }}
+                                position={{ x: comp.x, y: comp.y }}
+                                onClick={() => setSelectedId(comp.id)}
+                                onDragStop={(e, d) => {
+                                    setComponents((prev) =>
+                                        prev.map((c) =>
+                                            c.id === comp.id ? { ...c, x: d.x, y: d.y } : c
+                                        )
+                                    );
+                                }}
+                                onResizeStop={(e, direction, ref, delta, position) => {
+                                    setComponents((prev) =>
+                                        prev.map((c) =>
+                                            c.id === comp.id
+                                                ? {
+                                                      ...c,
+                                                      width: parseInt(ref.style.width),
+                                                      height: parseInt(ref.style.height),
+                                                      x: position.x,
+                                                      y: position.y,
+                                                  }
+                                                : c
+                                        )
+                                    );
+                                }}
+                                bounds="parent"
+                            >
                     <div
                         onDoubleClick={() => {
                             if (comp.type === 'label') {
@@ -390,7 +492,14 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
                                                         position: 'relative',
                                                         width: comp.cellSizes?.[ri]?.[ci]?.width,
                                                         height: comp.cellSizes?.[ri]?.[ci]?.height,
+                                                        background:
+                                                            selectedCells &&
+                                                            selectedCells.id === comp.id &&
+                                                            selectedCells.cells.some((c) => c.row === ri && c.col === ci)
+                                                                ? '#dbeafe'
+                                                                : undefined,
                                                     }}
+                                                    onClick={(e) => handleCellClick(comp.id, ri, ci, e)}
                                                     onDoubleClick={() => handleCellDoubleClick(comp.id, ri, ci, cell)}
                                                     onContextMenu={(e) => {
                                                         e.preventDefault();
@@ -490,7 +599,12 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
                         )}
                     </div>
                 </Rnd>
+                        ))}
+                </div>
             ))}
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <button onClick={() => setPageCount((p) => p + 1)}>페이지 추가</button>
+            </div>
             {contextCell && (
                 <div
                     style={{
@@ -504,21 +618,21 @@ function Canvas({ components, setComponents, undo, redo, canUndo, canRedo }: Pro
                 >
                     <button
                         onClick={() => {
-                            mergeRight(contextCell.id, contextCell.row, contextCell.col);
+                            mergeSelected();
                             setContextCell(null);
                         }}
                         style={{ display: 'block', width: '100%', padding: 4 }}
                     >
-                        오른쪽 셀과 병합
+                        셀 병합
                     </button>
                     <button
                         onClick={() => {
-                            mergeDown(contextCell.id, contextCell.row, contextCell.col);
+                            unmergeSelected();
                             setContextCell(null);
                         }}
                         style={{ display: 'block', width: '100%', padding: 4 }}
                     >
-                        아래 셀과 병합
+                        병합 해제
                     </button>
                 </div>
             )}

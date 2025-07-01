@@ -13,6 +13,8 @@ export interface ReportComponent {
   type: 'label' | 'table' | 'image';
   x: number;
   y: number;
+  /** Page index that this component belongs to */
+  page: number;
   width?: number;
   height?: number;
   text?: string;
@@ -53,17 +55,24 @@ function App() {
     canRedo,
   } = useUndo<ReportComponent[]>([]);
   const [preview, setPreview] = React.useState(false);
+  const [pageCount, setPageCount] = React.useState(1);
 
   return (
     <DndProvider backend={HTML5Backend}>
       {preview ? (
-        <Preview components={components} onClose={() => setPreview(false)} />
+        <Preview
+          components={components}
+          pageCount={pageCount}
+          onClose={() => setPreview(false)}
+        />
       ) : (
         <div style={{ display: 'flex', height: '100vh', position: 'relative' }}>
           <Sidebar />
           <Canvas
             components={components}
             setComponents={setComponents}
+            pageCount={pageCount}
+            setPageCount={setPageCount}
             undo={undo}
             redo={redo}
             canUndo={canUndo}
